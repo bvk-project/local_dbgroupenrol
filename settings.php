@@ -15,6 +15,14 @@ if ($hassiteconfig) {
         PARAM_TEXT
     ));
 
+    $settings->add(new admin_setting_configtext(
+        'local_dbgroupenrol/protectedgroupprefix',
+        get_string('protectedgroupprefix', 'local_dbgroupenrol'),
+        get_string('protectedgroupprefix_desc', 'local_dbgroupenrol'),
+        '@',
+        PARAM_TEXT
+    ));
+
     $ADMIN->add('localplugins', $settings);
 
     global $CFG;

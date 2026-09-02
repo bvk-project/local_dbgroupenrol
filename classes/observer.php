@@ -8,9 +8,9 @@ class observer {
     /**
      * Sync one user's group for one course when they are enrolled.
      *
-     * Triggered by \core\event\user_enrolled.
+     * Triggered by \core\event\user_enrolment_created.
      */
-    public static function user_enrolled(\core\event\user_enrolled $event): bool {
+    public static function user_enrolled(\core\event\user_enrolment_created $event): bool {
         global $DB, $CFG;
 
         require_once($CFG->dirroot . '/enrol/database/lib.php');
@@ -228,15 +228,48 @@ class observer {
             $group->id = \groups_create_group($group);
         }
 
-        // Add user to this group.
-        \groups_add_member($group->id, $userid);
+        // Add user to this group. groups_add_member() returns false when the
+        // user is not considered enrolled in the course at this moment.
+        $added = \groups_add_member($group->id, $userid);
+        if (!$added) {
+            debugging(
+                'local_dbgroupenrol: could not add user ' . $userid .
+                ' to group ' . $group->id . ' in course ' . $courseid .
+                ' because Moodle does not consider the user enrolled in the course.',
+                DEBUG_DEVELOPER
+            );
+            return;
+        }
 
-        // Remove from other groups in the same course.
+        // Remove from other groups in the same course, except groups whose
+        // names start with the configured protected prefix. These groups are
+        // considered manually managed and must not be changed by this plugin.
+        $protectedprefix = trim((string)get_config('local_dbgroupenrol', 'protectedgroupprefix'));
         $groups = \groups_get_all_groups($courseid, $userid);
         foreach ($groups as $g) {
-            if ((int)$g->id !== (int)$group->id) {
-                \groups_remove_member($g->id, $userid);
+            if ((int)$g->id === (int)$group->id) {
+                continue;
             }
+
+            if (self::is_protected_group_name((string)$g->name, $protectedprefix)) {
+                continue;
+            }
+
+            \groups_remove_member($g->id, $userid);
         }
+    }
+
+    /**
+     * Check whether a group name is protected from automatic member removal.
+     *
+     * An empty prefix disables the protection feature. Matching is
+     * case-sensitive and applies only at the beginning of the group name.
+     */
+    private static function is_protected_group_name(string $groupname, string $protectedprefix): bool {
+        if ($protectedprefix === '') {
+            return false;
+        }
+
+        return strncmp($groupname, $protectedprefix, strlen($protectedprefix)) === 0;
     }
 }

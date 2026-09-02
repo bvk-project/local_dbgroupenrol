@@ -2,6 +2,8 @@
 $string['pluginname']='Ārējās DB grupu sinhronizācija';
 $string['remotegroupnamefield']='Attālais grupas lauks';
 $string['remotegroupnamefield_desc']='Lauks ārējā DB, kurā ir grupas nosaukums.';
+$string['protectedgroupprefix']='Aizsargāto grupu prefikss';
+$string['protectedgroupprefix_desc']='Grupas, kuru nosaukums sākas ar šo simbolu vai frāzi, spraudnis automātiski neizņems lietotāju no grupas. Piemēram: @ vai MANUAL:. Atstājiet tukšu, lai aizsardzību neizmantotu.';
 $string['task_syncgroups']='Ārējās DB grupu sinhronizācija (CRON)';
 $string['mappingpage']='Ārējās DB grupu kartējums';
 

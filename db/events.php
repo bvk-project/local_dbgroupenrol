@@ -2,7 +2,7 @@
 defined('MOODLE_INTERNAL') || die();
 $observers=[
  [
-  'eventname'=>'\core\event\user_enrolled',
+  'eventname'=>'\core\event\user_enrolment_created',
   'callback'=>'\local_dbgroupenrol\observer::user_enrolled',
   'includefile'=>'/local/dbgroupenrol/classes/observer.php',
   'priority'=>1000,

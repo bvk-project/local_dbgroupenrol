@@ -2,6 +2,8 @@
 $string['pluginname']='External DB group synchronisation';
 $string['remotegroupnamefield']='Remote group name field';
 $string['remotegroupnamefield_desc']='The name of the field in the external DB containing group names.';
+$string['protectedgroupprefix']='Protected group prefix';
+$string['protectedgroupprefix_desc']='The plugin will not automatically remove users from groups whose names start with this character or phrase. For example: @ or MANUAL:. Leave empty to disable this protection.';
 $string['task_syncgroups']='Synchronise external DB groups';
 $string['mappingpage']='External DB group mapping';
 
