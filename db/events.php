@@ -13,4 +13,10 @@ $observers=[
   'includefile'=>'/local/dbgroupenrol/classes/observer.php',
   'priority'=>1000,
  ],
+ [
+  'eventname'=>'\core\event\user_loggedinas',
+  'callback'=>'\local_dbgroupenrol\observer::user_loggedinas',
+  'includefile'=>'/local/dbgroupenrol/classes/observer.php',
+  'priority'=>1000,
+ ],
 ];

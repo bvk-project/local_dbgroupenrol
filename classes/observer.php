@@ -110,6 +110,18 @@ class observer {
     }
 
     /**
+     * Synchronise the impersonated user, not the administrator.
+     * Triggered by \core\event\user_loggedinas.
+     */
+    public static function user_loggedinas(\core\event\user_loggedinas $event): bool {
+        $userid = (int)($event->relateduserid ?? 0);
+        if ($userid > 0) {
+            self::perform_full_sync_for_user($userid);
+        }
+        return true;
+    }
+
+    /**
      * Resync all user's groups from external DB.
      * Used by login event and can be reused elsewhere.
      */
@@ -169,47 +181,78 @@ class observer {
             return;
         }
 
+        // Resolve all assignments before mutating memberships. Ambiguous assignments
+        // must not select a random group based on external SQL row order.
+        $assignments = []; // [courseid][groupname] => true.
+        $invalidcourses = []; // Source has conflicting group names for a course.
         while ($row = $rs->FetchRow()) {
             if (!is_array($row)) {
                 continue;
             }
-
-            $remotecourse = null;
-            $groupname    = null;
-
-            if (array_key_exists('remotecourse', $row)) {
-                $remotecourse = $row['remotecourse'];
-            } elseif (array_key_exists(0, $row)) {
-                $remotecourse = $row[0];
-            }
-
-            if (array_key_exists('groupname', $row)) {
-                $groupname = $row['groupname'];
-            } elseif (array_key_exists(1, $row)) {
-                $groupname = $row[1];
-            }
-
-            if ($remotecourse === null || $groupname === null) {
-                continue;
-            }
-
-            $remotecourse = trim($remotecourse);
-            $groupname    = trim($groupname);
-
+            $remotecourse = trim((string)self::external_row_value($row, 'remotecourse', 0));
+            $groupname = trim((string)self::external_row_value($row, 'groupname', 1));
             if ($remotecourse === '' || $groupname === '') {
                 continue;
             }
+            $course = $DB->get_record('course', [$local_coursefield => $remotecourse], 'id', IGNORE_MISSING);
+            if ($course) {
+                $assignments[(int)$course->id][$groupname] = true;
+            }
+        }
+        $rs->Close();
 
-            $course = $DB->get_record('course', [$local_coursefield => $remotecourse],
-                                      'id,' . $local_coursefield, IGNORE_MISSING);
-            if (!$course) {
+        foreach ($assignments as $courseid => $names) {
+            if (count($names) !== 1) {
+                $invalidcourses[$courseid] = true;
+                debugging('local_dbgroupenrol: ambiguous external group assignments for user ' .
+                    $userid . ' in course ' . $courseid . '; leaving memberships unchanged.', DEBUG_DEVELOPER);
+            }
+        }
+
+        // Only touch courses in which this user currently has an active
+        // enrol_database enrolment. Other enrolment methods/groups are outside
+        // the scope of this external database synchronisation.
+        $sql = "SELECT DISTINCT e.courseid
+                  FROM {enrol} e
+                  JOIN {user_enrolments} ue ON ue.enrolid = e.id
+                 WHERE ue.userid = :userid AND ue.status = 0 AND e.status = 0
+                   AND e.enrol = :method";
+        $courseids = $DB->get_fieldset_sql($sql, ['userid' => $userid, 'method' => 'database']);
+        $protectedprefix = trim((string)get_config('local_dbgroupenrol', 'protectedgroupprefix'));
+        foreach ($courseids as $courseid) {
+            $courseid = (int)$courseid;
+            if (isset($invalidcourses[$courseid])) {
+                continue;
+            }
+            if (isset($assignments[$courseid])) {
+                $name = (string)array_key_first($assignments[$courseid]);
+                self::apply_group_for_user_in_course($userid, $courseid, $name);
                 continue;
             }
 
-            self::apply_group_for_user_in_course($userid, (int)$course->id, $groupname);
+            // The external DB has no group for this course. Remove obsolete
+            // non-protected group memberships (without deleting groups).
+            foreach (\groups_get_all_groups($courseid, $userid) as $group) {
+                if (!self::is_protected_group_name((string)$group->name, $protectedprefix)) {
+                    \groups_remove_member($group->id, $userid);
+                }
+            }
         }
+    }
 
-        $rs->Close();
+    /**
+     * Read ADOdb rows irrespective of associative key casing or driver mode.
+     */
+    private static function external_row_value(array $row, string $name, int $index) {
+        if (array_key_exists($name, $row)) {
+            return $row[$name];
+        }
+        foreach ($row as $key => $value) {
+            if (is_string($key) && strcasecmp($key, $name) === 0) {
+                return $value;
+            }
+        }
+        return $row[$index] ?? null;
     }
 
     /**
